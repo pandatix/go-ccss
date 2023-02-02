@@ -2,9 +2,9 @@
 
 [![reference](https://godoc.org/github.com/pandatix/go-ccss/v5?status.svg=)](https://pkg.go.dev/github.com/pandatix/go-ccss)
 [![go report](https://goreportcard.com/badge/github.com/pandatix/go-ccss)](https://goreportcard.com/report/github.com/pandatix/go-ccss)
-[![Coverage Status](https://coveralls.io/repos/github/pandatix/go-ccss/badge.svg?branch=master)](https://coveralls.io/github/pandatix/go-ccss?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/pandatix/go-ccss/badge.svg?branch=main)](https://coveralls.io/github/pandatix/go-ccss?branch=main)
 [![CI](https://github.com/pandatix/go-ccss/actions/workflows/ci.yaml/badge.svg)](https://github.com/pandatix/go-ccss/actions?query=workflow%3Aci+)
-[![CodeQL](https://github.com/pandatix/go-ccss/actions/workflows/codeql-analysis.yaml/badge.svg)](https://github.com/pandatix/go-ccss/actions/workflows/codeql-analysis.yml)
+[![CodeQL](https://github.com/pandatix/go-ccss/actions/workflows/codeql-analysis.yaml/badge.svg)](https://github.com/pandatix/go-ccss/actions/workflows/codeql-analysis.yaml)
 
 Go-CCSS is a low-allocation Go module made to manipulate Common Configuration Scoring System (CCSS), standardized by the [NIST-IR 7502](https://csrc.nist.gov/publications/detail/nistir/7502/final). It is the only implementation known today.
 
