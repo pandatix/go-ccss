@@ -3,6 +3,8 @@ package goccss
 import (
 	"math"
 	"strings"
+	"sync"
+	"unsafe"
 )
 
 var order = [][]string{
@@ -14,7 +16,11 @@ var order = [][]string{
 // ParseVector parses a CCSS vector.
 func ParseVector(vector string) (*CCSS, error) {
 	// Split parts
-	pts := strings.Split(vector, "/")
+	partsPtr := splitPool.Get()
+	defer splitPool.Put(partsPtr)
+	pts := partsPtr.([]string)
+	ei := split(pts, vector)
+	pts = pts[:ei+1]
 
 	// Work on each CCSS part
 	ccss := &CCSS{
@@ -49,10 +55,10 @@ func ParseVector(vector string) (*CCSS, error) {
 			tgt = order[1][i]
 			if i == 0 && tgt != abv {
 				slci++
-				tgt = order[2][i]
+				tgt = order[2][0]
 			}
 		default:
-			return nil, &ErrDefinedN{Abv: abv}
+			return nil, ErrInvalidMetricValue
 		}
 		if abv != tgt {
 			return nil, ErrInvalidMetricOrder
@@ -62,6 +68,7 @@ func ParseVector(vector string) (*CCSS, error) {
 			return nil, err
 		}
 
+		// Go to next element in slice, or next slice if fully consumed
 		i++
 		if i == len(order[slci]) {
 			slci++
@@ -72,50 +79,115 @@ func ParseVector(vector string) (*CCSS, error) {
 	if i != 0 {
 		return nil, ErrTooShortVector
 	}
+	// Check whole last metric group is specified in vector (=> i == 0)
+	if i != 0 {
+		return nil, ErrTooShortVector
+	}
 	return ccss, nil
 }
 
+var splitPool = sync.Pool{
+	New: func() any {
+		buf := make([]string, 20)
+		return buf
+	},
+}
+
+func split(dst []string, vector string) int {
+	start := 0
+	curr := 0
+	l := len(vector)
+	i := 0
+	for ; i < l; i++ {
+		if vector[i] == '/' {
+			dst[curr] = vector[start:i]
+
+			start = i + 1
+			curr++
+
+			if curr == 20 {
+				break
+			}
+		}
+	}
+	dst[curr] = vector[start:]
+	return curr
+}
+
 func (ccss CCSS) Vector() string {
-	str := "AV:" + ccss.accessVector
-	str += "/AC:" + ccss.accessComplexity
-	str += "/Au:" + ccss.authentication
-	str += "/C:" + ccss.confidentiality
-	str += "/I:" + ccss.integrity
-	str += "/A:" + ccss.availability
-	str += "/PL:" + ccss.privilegeLevel
-	str += "/EM:" + ccss.exploitationMethod
+	l := lenVec(&ccss)
+	b := make([]byte, 0, l)
 
-	gel := ccss.generalExploitLevel
-	grl := ccss.generalRemediationLevel
+	// Base
+	app(&b, "AV:", ccss.get("AV"))
+	app(&b, "/AC:", ccss.get("AC"))
+	app(&b, "/Au:", ccss.get("Au"))
+	app(&b, "/C:", ccss.get("C"))
+	app(&b, "/I:", ccss.get("I"))
+	app(&b, "/A:", ccss.get("A"))
+	app(&b, "/PL:", ccss.get("PL"))
+	app(&b, "/EM:", ccss.get("EM"))
+
+	// Temporal
+	gel, grl := ccss.get("GEL"), ccss.get("GRL")
 	if gel != "ND" || grl != "ND" {
-		str += "/GEL:" + gel
-		str += "/GRL:" + grl
+		app(&b, "/GEL:", gel)
+		app(&b, "/GRL:", grl)
 	}
 
-	lvp := ccss.localVulnerabilityPrevalence
-	ptv := ccss.perceivedTargetValue
-	lrl := ccss.localRemediationLevel
-	ec := ccss.environmentConfidentiality
-	ei := ccss.environmentIntegrity
-	ea := ccss.environmentAvailability
-	cdp := ccss.collateralDamagePotential
-	cr := ccss.confidentialityRequirement
-	ir := ccss.integrityRequirement
-	ar := ccss.availabilityRequirement
+	// Environmental
+	lvp, ptv, lrl, ec, ei, ea, cdp, cr, ir, ar := ccss.get("LVP"), ccss.get("PTV"), ccss.get("LRL"), ccss.get("EC"), ccss.get("EI"), ccss.get("EA"), ccss.get("CDP"), ccss.get("CR"), ccss.get("IR"), ccss.get("AR")
 	if lvp != "ND" || ptv != "ND" || lrl != "ND" || ec != "ND" || ei != "ND" || ea != "ND" || cdp != "ND" || cr != "ND" || ir != "ND" || ar != "ND" {
-		str += "/LVP:" + lvp
-		str += "/PTV:" + ptv
-		str += "/LRL:" + lrl
-		str += "/EC:" + ec
-		str += "/EI:" + ei
-		str += "/EA:" + ea
-		str += "/CDP:" + cdp
-		str += "/CR:" + cr
-		str += "/IR:" + ir
-		str += "/AR:" + ar
+		app(&b, "/LVP:", lvp)
+		app(&b, "/PTV:", ptv)
+		app(&b, "/LRL:", lrl)
+		app(&b, "/EC:", ec)
+		app(&b, "/EI:", ei)
+		app(&b, "/EA:", ea)
+		app(&b, "/CDP:", cdp)
+		app(&b, "/CR:", cr)
+		app(&b, "/IR:", ir)
+		app(&b, "/AR:", ar)
 	}
 
-	return str
+	return unsafe.String(&b[0], l)
+}
+
+func lenVec(ccss *CCSS) int {
+	// Base:
+	// - AV, AC, Au, EM: 4
+	// - C, I, A: 3
+	// - PL: 3 + len(v)
+	// - separators: 7
+	// Total: 4*4 + 3*3 + 10 + len(v)
+	pl := ccss.get("PL")
+	l := 4*4 + 3*3 + 10 + len(pl)
+
+	// Temporal:
+	// - GEL, GRL: 4 + len(v)
+	// - separators: 2
+	// Total: 5*2 + 2 + 2*len(v)
+	gel, grl := ccss.get("GEL"), ccss.get("GRL")
+	if gel != "ND" || grl != "ND" {
+		l += 4*2 + 2 + len(gel) + len(grl)
+	}
+
+	// Environmental:
+	// - LVP, PTV, LRL, CDP: 4 + len(v)
+	// - EC, EI, EA, CR, IR, AR: 3 + len(v)
+	// - separators: 10
+	// Total: 4*4 + 6*3 + 10 + 10*len(v)
+	lvp, ptv, lrl, ec, ei, ea, cdp, cr, ir, ar := ccss.get("LVP"), ccss.get("PTV"), ccss.get("LRL"), ccss.get("EC"), ccss.get("EI"), ccss.get("EA"), ccss.get("CDP"), ccss.get("CR"), ccss.get("IR"), ccss.get("AR")
+	if lvp != "ND" || ptv != "ND" || lrl != "ND" || ec != "ND" || ei != "ND" || ea != "ND" || cdp != "ND" || cr != "ND" || ir != "ND" || ar != "ND" {
+		l += 4*4 + 6*3 + 10 + len(lvp) + len(ptv) + len(lrl) + len(ec) + len(ei) + len(ea) + len(cdp) + len(cr) + len(ir) + len(ar)
+	}
+
+	return l
+}
+
+func app(b *[]byte, pre, v string) {
+	*b = append(*b, pre...)
+	*b = append(*b, v...)
 }
 
 type CCSS struct {
@@ -227,6 +299,15 @@ func (ccss CCSS) Get(abv string) (string, error) {
 	default:
 		return "", &ErrInvalidMetric{Abv: abv}
 	}
+}
+
+// get is used for internal purposes only.
+func (ccss CCSS) get(abv string) string {
+	str, err := ccss.Get(abv)
+	if err != nil {
+		panic(err)
+	}
+	return str
 }
 
 func (ccss *CCSS) Set(abv, value string) error {
