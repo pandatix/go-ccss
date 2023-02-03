@@ -24,23 +24,12 @@ func ParseVector(vector string) (*CCSS, error) {
 
 	// Work on each CCSS part
 	ccss := &CCSS{
-		base: base{},
-		temporal: temporal{
-			generalExploitLevel:     "ND",
-			generalRemediationLevel: "ND",
-		},
-		environmental: environmental{
-			localVulnerabilityPrevalence: "ND",
-			perceivedTargetValue:         "ND",
-			localRemediationLevel:        "ND",
-			environmentConfidentiality:   "ND",
-			environmentIntegrity:         "ND",
-			environmentAvailability:      "ND",
-			collateralDamagePotential:    "ND",
-			confidentialityRequirement:   "ND",
-			integrityRequirement:         "ND",
-			availabilityRequirement:      "ND",
-		},
+		u0: 0,
+		u1: 0,
+		u2: 0,
+		u3: 0,
+		u4: 0,
+		u5: 0, // last 4 bits not used
 	}
 
 	slci := 0
@@ -105,7 +94,7 @@ func split(dst []string, vector string) int {
 			start = i + 1
 			curr++
 
-			if curr == 20 {
+			if curr == 19 {
 				break
 			}
 		}
@@ -191,114 +180,257 @@ func app(b *[]byte, pre, v string) {
 }
 
 type CCSS struct {
-	base
-	temporal
-	environmental
+	u0, u1, u2, u3, u4, u5 uint8
 }
 
-type base struct {
-	// AV -> [L,A,N]. Mandatory
-	accessVector string
-	// AC -> [H,M,L]. Mandatory
-	accessComplexity string
-	// Au -> [M,S,N]. Mandatory
-	authentication string
-	// C -> [N,P,C]. Mandatory
-	confidentiality string
-	// I -> [N,P,C]. Mandatory
-	integrity string
-	// A -> [N,P,C]. Mandatory
-	availability string
-
-	// The following metrics are not used in the equations (Section 3.2)
-
-	// PL -> [R,U,A,ND]. Mandatory
-	privilegeLevel string
-	// EM -> [A,P]. Mandatory
-	exploitationMethod string
-}
-
-type temporal struct {
-	// GEL -> [N,L,M,H,ND]. Not mandatory
-	generalExploitLevel string
-	// GRL -> [H,M,L,N,ND]. Not mandatory
-	generalRemediationLevel string
-}
-
-type environmental struct {
-	// LVP -> [N,L,M,H,ND]. Not mandatory
-	localVulnerabilityPrevalence string
-	// PTV -> [L,M,H,ND]. Not mandatory
-	perceivedTargetValue string
-	// LRL -> [N,L,M,H,ND]. Not mandatory
-	localRemediationLevel string
-	// EC -> [N,P,C,ND]. Not mandatory
-	environmentConfidentiality string
-	// EI -> [N,P,C,ND]. Not mandatory
-	environmentIntegrity string
-	// EA -> [N,P,C,ND]. Not mandatory
-	environmentAvailability string
-	// CDP -> [N,L,LM,MH,H,ND]. Not mandatory
-	collateralDamagePotential string
-	// CR -> [L,M,H,ND]. Not mandatory
-	confidentialityRequirement string
-	// IR -> [L,M,H,ND]. Not mandatory
-	integrityRequirement string
-	// AR -> [L,M,H,ND]. Not mandatory
-	availabilityRequirement string
-}
-
-func (ccss CCSS) Get(abv string) (string, error) {
+func (ccss CCSS) Get(abv string) (r string, err error) {
 	switch abv {
 	// Base
 	case "AV":
-		return ccss.accessVector, nil
+		v := (ccss.u0 & 0b11000000) >> 6
+		switch v {
+		case av_l:
+			r = "L"
+		case av_a:
+			r = "A"
+		case av_n:
+			r = "N"
+		}
 	case "AC":
-		return ccss.accessComplexity, nil
+		v := (ccss.u0 & 0b00110000) >> 4
+		switch v {
+		case ac_h:
+			r = "H"
+		case ac_m:
+			r = "M"
+		case ac_l:
+			r = "L"
+		}
 	case "Au":
-		return ccss.authentication, nil
+		v := (ccss.u0 & 0b00001100) >> 2
+		switch v {
+		case au_m:
+			r = "M"
+		case au_s:
+			r = "S"
+		case au_n:
+			r = "N"
+		}
 	case "C":
-		return ccss.confidentiality, nil
+		v := ccss.u0 & 0b00000011
+		switch v {
+		case cia_n:
+			r = "N"
+		case cia_p:
+			r = "P"
+		case cia_c:
+			r = "C"
+		}
 	case "I":
-		return ccss.integrity, nil
+		v := (ccss.u1 & 0b11000000) >> 6
+		switch v {
+		case cia_n:
+			r = "N"
+		case cia_p:
+			r = "P"
+		case cia_c:
+			r = "C"
+		}
 	case "A":
-		return ccss.availability, nil
+		v := (ccss.u1 & 0b00110000) >> 4
+		switch v {
+		case cia_n:
+			r = "N"
+		case cia_p:
+			r = "P"
+		case cia_c:
+			r = "C"
+		}
 	case "PL":
-		return ccss.privilegeLevel, nil
+		v := (ccss.u1 & 0b00001100) >> 2
+		switch v {
+		case pl_nd:
+			r = "ND"
+		case pl_r:
+			r = "R"
+		case pl_u:
+			r = "U"
+		case pl_a:
+			r = "A"
+		}
 	case "EM":
-		return ccss.exploitationMethod, nil
+		v := (ccss.u1 & 0b00000010) >> 1
+		switch v {
+		case em_a:
+			r = "A"
+		case em_p:
+			r = "P"
+		}
 
 	// Temporal
 	case "GEL":
-		return ccss.generalExploitLevel, nil
+		v := ((ccss.u1 & 0b00000001) << 2) | ((ccss.u2 & 0b11000000) >> 6)
+		switch v {
+		case gel_nd:
+			r = "ND"
+		case gel_n:
+			r = "N"
+		case gel_l:
+			r = "L"
+		case gel_m:
+			r = "M"
+		case gel_h:
+			r = "H"
+		}
 	case "GRL":
-		return ccss.generalRemediationLevel, nil
+		v := (ccss.u2 & 0b00111000) >> 3
+		switch v {
+		case grl_nd:
+			r = "ND"
+		case grl_h:
+			r = "H"
+		case grl_m:
+			r = "M"
+		case grl_l:
+			r = "L"
+		case grl_n:
+			r = "N"
+		}
 
 	// Environmental
 	case "LVP":
-		return ccss.localVulnerabilityPrevalence, nil
+		v := ccss.u2 & 0b00000111
+		switch v {
+		case lvp_nd:
+			r = "ND"
+		case lvp_n:
+			r = "N"
+		case lvp_l:
+			r = "L"
+		case lvp_m:
+			r = "M"
+		case lvp_h:
+			r = "H"
+		}
 	case "PTV":
-		return ccss.perceivedTargetValue, nil
+		v := (ccss.u3 & 0b11000000) >> 6
+		switch v {
+		case ptv_nd:
+			r = "ND"
+		case ptv_l:
+			r = "L"
+		case ptv_m:
+			r = "M"
+		case ptv_h:
+			r = "H"
+		}
 	case "LRL":
-		return ccss.localRemediationLevel, nil
+		v := (ccss.u3 & 0b00111000) >> 3
+		switch v {
+		case lrl_nd:
+			r = "ND"
+		case lrl_n:
+			r = "N"
+		case lrl_l:
+			r = "L"
+		case lrl_m:
+			r = "M"
+		case lrl_h:
+			r = "H"
+		}
 	case "EC":
-		return ccss.environmentConfidentiality, nil
+		v := (ccss.u3 & 0b00000110) >> 1
+		switch v {
+		case ecia_nd:
+			r = "ND"
+		case ecia_n:
+			r = "N"
+		case ecia_p:
+			r = "P"
+		case ecia_c:
+			r = "C"
+		}
 	case "EI":
-		return ccss.environmentIntegrity, nil
+		v := ((ccss.u3 & 0b00000001) << 1) | ((ccss.u4 & 0b10000000) >> 7)
+		switch v {
+		case ecia_nd:
+			r = "ND"
+		case ecia_n:
+			r = "N"
+		case ecia_p:
+			r = "P"
+		case ecia_c:
+			r = "C"
+		}
 	case "EA":
-		return ccss.environmentAvailability, nil
+		v := (ccss.u4 & 0b01100000) >> 5
+		switch v {
+		case ecia_nd:
+			r = "ND"
+		case ecia_n:
+			r = "N"
+		case ecia_p:
+			r = "P"
+		case ecia_c:
+			r = "C"
+		}
 	case "CDP":
-		return ccss.collateralDamagePotential, nil
+		v := (ccss.u4 & 0b00011100) >> 2
+		switch v {
+		case cdp_nd:
+			r = "ND"
+		case cdp_n:
+			r = "N"
+		case cdp_l:
+			r = "L"
+		case cdp_lm:
+			r = "LM"
+		case cdp_mh:
+			r = "MH"
+		case cdp_h:
+			r = "H"
+		}
 	case "CR":
-		return ccss.confidentialityRequirement, nil
+		v := ccss.u4 & 0b00000011
+		switch v {
+		case ciar_nd:
+			r = "ND"
+		case ciar_l:
+			r = "L"
+		case ciar_m:
+			r = "M"
+		case ciar_h:
+			r = "H"
+		}
 	case "IR":
-		return ccss.integrityRequirement, nil
+		v := (ccss.u5 & 0b11000000) >> 6
+		switch v {
+		case ciar_nd:
+			r = "ND"
+		case ciar_l:
+			r = "L"
+		case ciar_m:
+			r = "M"
+		case ciar_h:
+			r = "H"
+		}
 	case "AR":
-		return ccss.availabilityRequirement, nil
+		v := (ccss.u5 & 0b00110000) >> 4
+		switch v {
+		case ciar_nd:
+			r = "ND"
+		case ciar_l:
+			r = "L"
+		case ciar_m:
+			r = "M"
+		case ciar_h:
+			r = "H"
+		}
 
 	default:
 		return "", &ErrInvalidMetric{Abv: abv}
 	}
+	return
 }
 
 // get is used for internal purposes only.
@@ -314,109 +446,131 @@ func (ccss *CCSS) Set(abv, value string) error {
 	switch abv {
 	// Base
 	case "AV":
-		if err := validate(value, []string{"L", "A", "N"}); err != nil {
+		v, err := validate(value, []string{"L", "A", "N"})
+		if err != nil {
 			return err
 		}
-		ccss.accessVector = value
+		ccss.u0 = (ccss.u0 & 0b00111111) | (v << 6)
 	case "AC":
-		if err := validate(value, []string{"H", "M", "L"}); err != nil {
+		v, err := validate(value, []string{"H", "M", "L"})
+		if err != nil {
 			return err
 		}
-		ccss.accessComplexity = value
+		ccss.u0 = (ccss.u0 & 0b11001111) | (v << 4)
 	case "Au":
-		if err := validate(value, []string{"M", "S", "N"}); err != nil {
+		v, err := validate(value, []string{"M", "S", "N"})
+		if err != nil {
 			return err
 		}
-		ccss.authentication = value
+		ccss.u0 = (ccss.u0 & 0b11110011) | (v << 2)
 	case "C":
-		if err := validate(value, []string{"N", "P", "C"}); err != nil {
+		v, err := validate(value, []string{"N", "P", "C"})
+		if err != nil {
 			return err
 		}
-		ccss.confidentiality = value
+		ccss.u0 = (ccss.u0 & 0b11111100) | v
 	case "I":
-		if err := validate(value, []string{"N", "P", "C"}); err != nil {
+		v, err := validate(value, []string{"N", "P", "C"})
+		if err != nil {
 			return err
 		}
-		ccss.integrity = value
+		ccss.u1 = (ccss.u1 & 0b00111111) | (v << 6)
 	case "A":
-		if err := validate(value, []string{"N", "P", "C"}); err != nil {
+		v, err := validate(value, []string{"N", "P", "C"})
+		if err != nil {
 			return err
 		}
-		ccss.availability = value
+		ccss.u1 = (ccss.u1 & 0b11001111) | (v << 4)
 	case "PL":
-		if err := validate(value, []string{"R", "U", "A", "ND"}); err != nil {
+		v, err := validate(value, []string{"ND", "R", "U", "A"})
+		if err != nil {
 			return err
 		}
-		ccss.privilegeLevel = value
+		ccss.u1 = (ccss.u1 & 0b11110011) | (v << 2)
 	case "EM":
-		if err := validate(value, []string{"A", "P"}); err != nil {
+		v, err := validate(value, []string{"A", "P"})
+		if err != nil {
 			return err
 		}
-		ccss.exploitationMethod = value
+		ccss.u1 = (ccss.u1 & 0b11111101) | (v << 1)
 
 	// Temporal
 	case "GEL":
-		if err := validate(value, []string{"N", "L", "M", "H", "ND"}); err != nil {
+		v, err := validate(value, []string{"ND", "N", "L", "M", "H"})
+		if err != nil {
 			return err
 		}
-		ccss.generalExploitLevel = value
+		ccss.u1 = (ccss.u1 & 0b11111110) | ((v & 0b100) >> 2)
+		ccss.u2 = (ccss.u2 & 0b00111111) | ((v & 0b011) << 6)
 	case "GRL":
-		if err := validate(value, []string{"H", "M", "L", "N", "ND"}); err != nil {
+		v, err := validate(value, []string{"ND", "H", "M", "L", "N"})
+		if err != nil {
 			return err
 		}
-		ccss.generalRemediationLevel = value
+		ccss.u2 = (ccss.u2 & 0b11000111) | (v << 3)
 
 	// Environmental
 	case "LVP":
-		if err := validate(value, []string{"N", "L", "M", "H", "ND"}); err != nil {
+		v, err := validate(value, []string{"ND", "N", "L", "M", "H"})
+		if err != nil {
 			return err
 		}
-		ccss.localVulnerabilityPrevalence = value
+		ccss.u2 = (ccss.u2 & 0b11111000) | v
 	case "PTV":
-		if err := validate(value, []string{"L", "M", "H", "ND"}); err != nil {
+		v, err := validate(value, []string{"ND", "L", "M", "H"})
+		if err != nil {
 			return err
 		}
-		ccss.perceivedTargetValue = value
+		ccss.u3 = (ccss.u3 & 0b00111111) | (v << 6)
 	case "LRL":
-		if err := validate(value, []string{"N", "L", "M", "H", "ND"}); err != nil {
+		v, err := validate(value, []string{"ND", "N", "L", "M", "H"})
+		if err != nil {
 			return err
 		}
-		ccss.localRemediationLevel = value
+		ccss.u3 = (ccss.u3 & 0b11000111) | (v << 3)
 	case "EC":
-		if err := validate(value, []string{"N", "P", "C", "ND"}); err != nil {
+		v, err := validate(value, []string{"ND", "N", "P", "C"})
+		if err != nil {
 			return err
 		}
-		ccss.environmentConfidentiality = value
+		ccss.u3 = (ccss.u3 & 0b11111001) | (v << 1)
 	case "EI":
-		if err := validate(value, []string{"N", "P", "C", "ND"}); err != nil {
+		v, err := validate(value, []string{"ND", "N", "P", "C"})
+		if err != nil {
 			return err
 		}
-		ccss.environmentIntegrity = value
+		ccss.u3 = (ccss.u3 & 0b11111110) | ((v & 0b10) >> 1)
+		ccss.u4 = (ccss.u4 & 0b01111111) | ((v & 0b01) << 7)
 	case "EA":
-		if err := validate(value, []string{"N", "P", "C", "ND"}); err != nil {
+		v, err := validate(value, []string{"ND", "N", "P", "C"})
+		if err != nil {
 			return err
 		}
-		ccss.environmentAvailability = value
+		ccss.u4 = (ccss.u4 & 0b10011111) | (v << 5)
 	case "CDP":
-		if err := validate(value, []string{"N", "L", "LM", "MH", "H", "ND"}); err != nil {
+		v, err := validate(value, []string{"ND", "N", "L", "LM", "MH", "H"})
+		if err != nil {
 			return err
 		}
-		ccss.collateralDamagePotential = value
+		ccss.u4 = (ccss.u4 & 0b11100011) | (v << 2)
 	case "CR":
-		if err := validate(value, []string{"L", "M", "H", "ND"}); err != nil {
+		v, err := validate(value, []string{"ND", "L", "M", "H"})
+		if err != nil {
 			return err
 		}
-		ccss.confidentialityRequirement = value
+		ccss.u4 = (ccss.u4 & 0b11111100) | v
 	case "IR":
-		if err := validate(value, []string{"L", "M", "H", "ND"}); err != nil {
+		v, err := validate(value, []string{"ND", "L", "M", "H"})
+		if err != nil {
 			return err
 		}
-		ccss.integrityRequirement = value
+		ccss.u5 = (ccss.u5 & 0b00110000) | (v << 6)
 	case "AR":
-		if err := validate(value, []string{"L", "M", "H", "ND"}); err != nil {
+		v, err := validate(value, []string{"ND", "L", "M", "H"})
+		if err != nil {
 			return err
 		}
-		ccss.availabilityRequirement = value
+		ccss.u5 = (ccss.u5 & 0b11000000) | (v << 4)
 
 	default:
 		return &ErrInvalidMetric{Abv: abv}
@@ -424,14 +578,17 @@ func (ccss *CCSS) Set(abv, value string) error {
 	return nil
 }
 
-func validate(value string, enabled []string) error {
+// validate returns the index of value in enabled if matches.
+// enabled values have to match the values.go constants order.
+func validate(value string, enabled []string) (i uint8, err error) {
 	// Check is valid
 	for _, enbl := range enabled {
 		if value == enbl {
-			return nil
+			return i, nil
 		}
+		i++
 	}
-	return ErrInvalidMetricValue
+	return 0, ErrInvalidMetricValue
 }
 
 func (ccss CCSS) BaseScore() float64 {
@@ -440,34 +597,52 @@ func (ccss CCSS) BaseScore() float64 {
 }
 
 func (ccss CCSS) Impact() float64 {
-	return 10.41 * (1 - (1-cia(ccss.base.confidentiality))*(1-cia(ccss.base.integrity))*(1-cia(ccss.base.availability)))
+	c := ccss.u0 & 0b00000011
+	i := (ccss.u1 & 0b11000000) >> 6
+	a := (ccss.u1 & 0b00110000) >> 4
+	return 10.41 * (1 - (1-cia(c))*(1-cia(i))*(1-cia(a)))
 }
 
 func (ccss CCSS) Exploitability() float64 {
-	return 20 * accessVector(ccss.base.accessVector) * authentication(ccss.base.authentication) * accessComplexity(ccss.base.accessComplexity)
+	av := (ccss.u0 & 0b11000000) >> 6
+	ac := (ccss.u0 & 0b00110000) >> 4
+	au := (ccss.u0 & 0b00001100) >> 2
+	return 20 * accessVector(av) * authentication(au) * accessComplexity(ac)
 }
 
 func (ccss CCSS) TemporalScore() float64 {
-	tmpExplt := math.Min(10, ccss.Exploitability()*generalExploitLevel(ccss.temporal.generalExploitLevel)*generalRemediationLevel(ccss.temporal.generalRemediationLevel))
+	gel := ((ccss.u1 & 0b00000001) << 2) | ((ccss.u2 & 0b11000000) >> 6)
+	grl := (ccss.u2 & 0b00111000) >> 3
+	tmpExplt := math.Min(10, ccss.Exploitability()*generalExploitLevel(gel)*generalRemediationLevel(grl))
 	return roundTo1Decimal(((0.6 * ccss.Impact()) + (0.4 * tmpExplt) - 1.5) * fImpact(ccss.Impact()))
 }
 
 func (ccss CCSS) EnvironmentalScore() float64 {
-	c := mod(ccss.base.confidentiality, ccss.environmental.environmentConfidentiality)
-	i := mod(ccss.base.integrity, ccss.environmental.environmentIntegrity)
-	a := mod(ccss.base.availability, ccss.environmental.environmentAvailability)
+	c := mod(ccss.u0&0b00000011, (ccss.u3&0b00000110)>>1)
+	i := mod((ccss.u1&0b11000000)>>6, ((ccss.u3&0b00000001)<<1)|((ccss.u4&0b10000000)>>7))
+	a := mod((ccss.u1&0b00110000)>>4, (ccss.u4&0b01100000)>>5)
+	lvp := ccss.u2 & 0b00000111
+	ptv := (ccss.u3 & 0b11000000) >> 6
+	cr := ccss.u4 & 0b00000011
+	ir := (ccss.u5 & 0b11000000) >> 6
+	ar := (ccss.u5 & 0b00110000) >> 4
+	cdp := (ccss.u4 & 0b00011100) >> 2
+	gel := ((ccss.u1 & 0b00000001) << 2) | ((ccss.u2 & 0b11000000) >> 6)
+	lrl := (ccss.u3 & 0b00111000) >> 3
 
-	lclExpltLvl := localVulnerabilityPrevalence(ccss.environmental.localVulnerabilityPrevalence) * perceivedTargetValue(ccss.environmental.perceivedTargetValue)
-	envImpact := math.Min(10, 10.41*(1-(1-cia(c)*ciar(ccss.environmental.confidentialityRequirement))*(1-cia(i)*ciar(ccss.environmental.integrityRequirement))*(1-cia(a)*ciar(ccss.environmental.availabilityRequirement)))*collateralDamagePotential(ccss.environmental.collateralDamagePotential))
-	envExplt := math.Min(10, ccss.Exploitability()*generalExploitLevel(ccss.temporal.generalExploitLevel)*lclExpltLvl*localRemediationLevel(ccss.environmental.localRemediationLevel))
+	lclExpltLvl := localVulnerabilityPrevalence(lvp) * perceivedTargetValue(ptv)
+	envImpact := math.Min(10, 10.41*(1-(1-cia(c)*ciar(cr))*(1-cia(i)*ciar(ir))*(1-cia(a)*ciar(ar)))*collateralDamagePotential(cdp))
+	envExplt := math.Min(10, ccss.Exploitability()*generalExploitLevel(gel)*lclExpltLvl*localRemediationLevel(lrl))
 	return roundTo1Decimal(((0.6 * envImpact) + (0.4 * envExplt) - 1.5) * fImpact(ccss.Impact()))
 }
 
 // Helpers to compute CCSS scores.
 
-func mod(base, env string) string {
-	if env != "ND" {
-		return env
+func mod(base, modified uint8) uint8 {
+	// If "modified" is different of 0, it is different of "X"
+	// => shift to one before (skip X index)
+	if modified != 0 {
+		return modified - 1
 	}
 	return base
 }
@@ -479,170 +654,156 @@ func fImpact(v float64) float64 {
 	return 1.176
 }
 
-func accessVector(v string) float64 {
+func accessVector(v uint8) float64 {
 	switch v {
-	case "L":
+	case av_l:
 		return 0.395
-	case "A":
+	case av_a:
 		return 0.646
-	case "N":
+	case av_n:
 		return 1.0
 	default:
 		panic(ErrInvalidMetricValue)
 	}
 }
 
-func authentication(v string) float64 {
+func authentication(v uint8) float64 {
 	switch v {
-	case "M":
+	case au_m:
 		return 0.45
-	case "S":
+	case au_s:
 		return 0.56
-	case "N":
+	case au_n:
 		return 0.704
 	default:
 		panic(ErrInvalidMetricValue)
 	}
 }
 
-func accessComplexity(v string) float64 {
+func accessComplexity(v uint8) float64 {
 	switch v {
-	case "H":
+	case ac_h:
 		return 0.35
-	case "M":
+	case ac_m:
 		return 0.61
-	case "L":
+	case ac_l:
 		return 0.71
 	default:
 		panic(ErrInvalidMetricValue)
 	}
 }
 
-func cia(v string) float64 {
+func cia(v uint8) float64 {
 	switch v {
-	case "N":
+	case cia_n:
 		return 0.0
-	case "P":
+	case cia_p:
 		return 0.275
-	case "C":
+	case cia_c:
 		return 0.660
 	default:
 		panic(ErrInvalidMetricValue)
 	}
 }
 
-func generalExploitLevel(v string) float64 {
+func generalExploitLevel(v uint8) float64 {
 	switch v {
-	case "N":
+	case gel_n:
 		return 0.6
-	case "L":
+	case gel_l:
 		return 0.8
-	case "M":
+	case gel_m, gel_nd:
 		return 1.0
-	case "H":
+	case gel_h:
 		return 1.2
-	case "ND":
-		return 1.0
 	default:
 		panic(ErrInvalidMetricValue)
 	}
 }
 
-func generalRemediationLevel(v string) float64 {
+func generalRemediationLevel(v uint8) float64 {
 	switch v {
-	case "H":
+	case grl_h:
 		return 0.4
-	case "M":
+	case grl_m:
 		return 0.6
-	case "L":
+	case grl_l:
 		return 0.8
-	case "N":
-		return 1.0
-	case "ND":
+	case grl_n, grl_nd:
 		return 1.0
 	default:
 		panic(ErrInvalidMetricValue)
 	}
 }
 
-func localVulnerabilityPrevalence(v string) float64 {
+func localVulnerabilityPrevalence(v uint8) float64 {
 	switch v {
-	case "N":
+	case lvp_n:
 		return 0.6
-	case "L":
+	case lvp_l:
 		return 0.8
-	case "M":
+	case lvp_m, lvp_nd:
 		return 1.0
-	case "H":
+	case lvp_h:
 		return 1.2
-	case "ND":
-		return 1.0
 	default:
 		panic(ErrInvalidMetricValue)
 	}
 }
 
-func perceivedTargetValue(v string) float64 {
+func perceivedTargetValue(v uint8) float64 {
 	switch v {
-	case "L":
+	case ptv_l:
 		return 0.8
-	case "M":
+	case ptv_m, ptv_nd:
 		return 1.0
-	case "H":
+	case ptv_h:
 		return 1.2
-	case "ND":
-		return 1.0
 	default:
 		panic(ErrInvalidMetricValue)
 	}
 }
 
-func ciar(v string) float64 {
+func ciar(v uint8) float64 {
 	switch v {
-	case "L":
+	case ciar_l:
 		return 0.5
-	case "M":
+	case ciar_m, ciar_nd:
 		return 1.0
-	case "H":
+	case ciar_h:
 		return 1.51
-	case "ND":
-		return 1.0
 	default:
 		panic(ErrInvalidMetricValue)
 	}
 }
 
-func collateralDamagePotential(v string) float64 {
+func collateralDamagePotential(v uint8) float64 {
 	switch v {
-	case "N":
+	case cdp_n, cdp_nd:
 		return 1.0
-	case "L":
+	case cdp_l:
 		return 1.25
-	case "LM":
+	case cdp_lm:
 		return 1.5
-	case "MH":
+	case cdp_mh:
 		return 1.75
-	case "H":
+	case cdp_h:
 		return 2.0
-	case "ND":
-		return 1.0
 	default:
 		panic(ErrInvalidMetricValue)
 	}
 }
 
-func localRemediationLevel(v string) float64 {
+func localRemediationLevel(v uint8) float64 {
 	switch v {
-	case "N":
+	case lrl_n, lrl_nd:
 		return 1.0
-	case "L":
+	case lrl_l:
 		return 0.8
-	case "M":
+	case lrl_m:
 		return 0.6
-	case "H":
+	case lrl_h:
 		return 0.4
-	case "ND":
-		return 1.0
 	default:
 		panic(ErrInvalidMetricValue)
 	}
